@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CV Screening Desk — AI Candidate Evaluation</title>
+<meta name="description" content="Paste a job description and candidate resumes, get a weighted, bias-checked shortlist — free to run, powered by the Gemini API.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   Design tokens — Google Material palette
+   Primary blue is Google's own #1A73E8; decision chips reuse the
+   four Google brand colors (blue/red/yellow/green) as the verdict
+   language, so the palette itself carries meaning.
+   ============================================================ */
+:root{
+  --blue: #1A73E8;
+  --blue-dark: #1557B0;
+  --blue-tint: #E8F0FE;
+  --red: #EA4335;
+  --red-tint: #FCE8E6;
+  --yellow: #B06000;
+  --yellow-bg: #FEF7E0;
+  --green: #1E8E3E;
+  --green-tint: #E6F4EA;
+
+  --grey-50: #F8F9FA;
+  --grey-100: #F1F3F4;
+  --grey-300: #DADCE0;
+  --grey-500: #80868B;
+  --grey-600: #5F6368;
+  --grey-900: #202124;
+  --white: #FFFFFF;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 24px;
+
+  --shadow-1: 0 1px 2px 0 rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15);
+  --shadow-2: 0 1px 3px 0 rgba(60,64,67,.30), 0 4px 8px 3px rgba(60,64,67,.15);
+
+  --font: 'Roboto', 'Segoe UI', Arial, sans-serif;
+  --font-mono: 'Roboto Mono', 'SF Mono', monospace;
+}
+
+*, *::before, *::after{ box-sizing: border-box; }
+
+body{
+  margin: 0;
+  background: var(--grey-50);
+  color: var(--grey-900);
+  font-family: var(--font);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a{ color: var(--blue); }
+:focus-visible{ outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.wrap{ max-width: 900px; margin: 0 auto; padding: 0 20px 60px; }
+
+/* ============================================================
+   Top app bar
+   ============================================================ */
+.appbar{
+  background: var(--white);
+  border-bottom: 1px solid var(--grey-300);
+  margin-bottom: 24px;
+}
+.appbar__inner{
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.appbar__mark{
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.appbar__mark span{ display: block; border-radius: 2px; }
+.appbar__mark span:nth-child(1){ background: var(--blue); }
+.appbar__mark span:nth-child(2){ background: var(--red); }
+.appbar__mark span:nth-child(3){ background: var(--yellow); }
+.appbar__mark span:nth-child(4){ background: var(--green); }
+.appbar__title{ flex: 1; min-width: 0; }
+.appbar__title h1{
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.appbar__title p{
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--grey-600);
+}
+@media (max-width: 560px){ .appbar__title p{ display: none; } }
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn{
+  font-family: var(--font);
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: var(--radius-pill);
+  padding: 10px 20px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s ease, box-shadow 0.15s ease, border-color .15s ease;
+  white-space: nowrap;
+}
+.btn--filled{ background: var(--blue); color: #fff; }
+.btn--filled:hover{ background: var(--blue-dark); box-shadow: var(--shadow-1); }
+.btn--filled:disabled{ background: var(--grey-300); color: var(--grey-500); cursor: not-allowed; }
+.btn--outline{ background: var(--white); color: var(--blue); border-color: var(--grey-300); }
+.btn--outline:hover{ background: var(--blue-tint); border-color: var(--blue); }
+.btn--text{ background: transparent; color: var(--blue); padding: 10px 12px; }
+.btn--text:hover{ background: var(--blue-tint); }
+.btn--sm{ padding: 7px 14px; font-size: 13px; }
+.btn--lg{ padding: 12px 26px; font-size: 15px; }
+.btn--icon{ padding: 8px; border-radius: 50%; }
+.file-btn{ position: relative; }
+
+/* ============================================================
+   Tabs (Material text tabs w/ underline indicator)
+   ============================================================ */
+.tabs{
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--grey-300);
+  margin-bottom: 24px;
+}
+.tab{
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--grey-600);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 12px 18px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: color .15s ease, border-color .15s ease;
+}
+.tab:hover{ color: var(--grey-900); }
+.tab.is-active{ color: var(--blue); border-bottom-color: var(--blue); }
+.tab__count{
+  background: var(--grey-100);
+  color: var(--grey-600);
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 1px 7px;
+  min-width: 16px;
+  text-align: center;
+}
+.tab.is-active .tab__count{ background: var(--blue-tint); color: var(--blue); }
+
+/* ============================================================
+   Card / panels
+   ============================================================ */
+.card{
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: 32px;
+}
+@media (max-width: 620px){ .card{ padding: 22px 18px; } }
+
+.panel{ display: none; }
+.panel.is-active{ display: block; }
+
+.panel__head h2{ font-size: 22px; font-weight: 500; margin: 0 0 6px; }
+.panel__head p{ margin: 0 0 22px; color: var(--grey-600); font-size: 14px; max-width: 62ch; }
+.panel__foot{ margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--grey-100); display: flex; justify-content: space-between; }
+
+/* ============================================================
+   Form elements
+   ============================================================ */
+.field-label{ display: block; font-size: 13px; font-weight: 500; color: var(--grey-900); margin: 18px 0 6px; }
+.field-label:first-child{ margin-top: 0; }
+.field-hint{ font-size: 12.5px; color: var(--grey-600); margin: 6px 0 0; line-height: 1.5; }
+
+.textarea, .input{
+  width: 100%;
+  font-family: var(--font);
+  font-size: 14.5px;
+  color: var(--grey-900);
+  background: var(--white);
+  border: 1px solid var(--grey-300);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  resize: vertical;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.textarea:focus, .input:focus{ border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.textarea--tall{ min-height: 220px; line-height: 1.6; }
+
+.checkbox{ display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--grey-600); margin: 16px 0; cursor: pointer; }
+
+/* ============================================================
+   Dropzone (bulk resume upload — primary action)
+   ============================================================ */
+.dropzone{
+  border: 2px dashed var(--grey-300);
+  border-radius: var(--radius-md);
+  background: var(--grey-50);
+  padding: 34px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.dropzone:hover, .dropzone.is-dragover{ border-color: var(--blue); background: var(--blue-tint); }
+.dropzone svg{ color: var(--blue); margin-bottom: 10px; }
+.dropzone h3{ font-size: 15px; font-weight: 500; margin: 0 0 4px; }
+.dropzone p{ font-size: 13px; color: var(--grey-600); margin: 0; }
+.dropzone input{ display: none; }
+.upload-status{ font-size: 13px; color: var(--grey-600); margin-top: 10px; min-height: 18px; }
+
+.divider-row{ display: flex; align-items: center; gap: 12px; margin: 22px 0; color: var(--grey-500); font-size: 12.5px; }
+.divider-row::before, .divider-row::after{ content: ""; flex: 1; height: 1px; background: var(--grey-300); }
+
+.jd-upload-row{ display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.jd-upload-row__hint{ font-size: 12.5px; color: var(--grey-600); }
+
+/* ============================================================
+   Candidate cards
+   ============================================================ */
+.candidate-list{ display: flex; flex-direction: column; gap: 12px; margin: 20px 0; }
+.candidate-card{
+  border: 1px solid var(--grey-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  padding: 14px 16px;
+}
+.candidate-card__row{ display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.candidate-card__badge{
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--blue-tint); color: var(--blue);
+  font-size: 12px; font-weight: 700; font-family: var(--font-mono);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.candidate-card__id{ flex: 1; font-family: var(--font); font-size: 13.5px; border: 1px solid var(--grey-300); border-radius: var(--radius-sm); padding: 8px 10px; }
+.candidate-card__remove{ background: transparent; border: none; color: var(--red); cursor: pointer; font-size: 12.5px; font-weight: 500; padding: 6px 8px; border-radius: var(--radius-sm); }
+.candidate-card__remove:hover{ background: var(--red-tint); }
+.candidate-card textarea{ width: 100%; min-height: 100px; font-size: 13.5px; font-family: var(--font); border: 1px solid var(--grey-300); background: var(--grey-50); border-radius: var(--radius-sm); padding: 10px 12px; line-height: 1.55; }
+.candidate-card__meta{ font-size: 11.5px; color: var(--grey-500); margin-top: 6px; font-family: var(--font-mono); }
+
+.empty-state{ text-align: center; padding: 30px 10px; color: var(--grey-600); }
+.empty-state svg{ color: var(--grey-300); margin-bottom: 10px; }
+.empty-state p{ font-size: 13.5px; margin: 0; }
+
+/* ============================================================
+   Run bar / loading / errors
+   ============================================================ */
+.run-bar{
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 20px; background: var(--blue-tint); border-radius: var(--radius-md);
+}
+.run-bar__meta{ font-size: 13px; color: var(--blue-dark); }
+
+.loading{ display: flex; align-items: center; gap: 16px; padding: 26px 4px; }
+.spinner{
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 3px solid var(--blue-tint); border-top-color: var(--blue);
+  animation: spin 0.8s linear infinite; flex-shrink: 0;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+.loading p{ margin: 0; color: var(--grey-600); font-size: 14px; }
+@media (prefers-reduced-motion: reduce){ .spinner{ animation: none; } }
+
+.error-box{ background: var(--red-tint); border: 1px solid var(--red); color: #8C1D14; border-radius: var(--radius-sm); padding: 14px 16px; font-size: 13.5px; margin-top: 16px; }
+
+/* ============================================================
+   Results
+   ============================================================ */
+.results{ margin-top: 28px; }
+.export-row{ display: flex; gap: 10px; margin-bottom: 28px; }
+.doc-block{ margin-bottom: 36px; padding-top: 24px; border-top: 1px solid var(--grey-100); }
+.doc-block:first-child{ border-top: none; padding-top: 0; }
+.doc-block h3{ font-size: 18px; font-weight: 500; margin: 0 0 4px; }
+.doc-block__hint{ font-size: 12.5px; color: var(--grey-600); margin: 0 0 12px; }
+
+.table-wrap{ overflow-x: auto; border: 1px solid var(--grey-300); border-radius: var(--radius-md); }
+table.gtable{ width: 100%; border-collapse: collapse; font-size: 13px; }
+table.gtable th{
+  font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .03em;
+  color: var(--grey-600); text-align: left; padding: 10px 14px; background: var(--grey-50);
+  border-bottom: 1px solid var(--grey-300); white-space: nowrap;
+}
+table.gtable td{ padding: 11px 14px; border-bottom: 1px solid var(--grey-100); vertical-align: top; }
+table.gtable tbody tr:last-child td{ border-bottom: none; }
+table.gtable tbody tr:hover{ background: var(--grey-50); }
+.gtable--clickable tbody tr{ cursor: pointer; }
+td.num, th.num{ font-family: var(--font-mono); text-align: right; }
+
+.knockout-box{ margin-top: 14px; }
+.knockout-box:empty{ display: none; }
+.knockout-box .ko-item{ background: var(--red-tint); border-left: 3px solid var(--red); padding: 9px 12px; font-size: 13px; margin-bottom: 6px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+
+/* redaction bar */
+.redact{ display: inline-flex; gap: 2px; vertical-align: middle; margin-right: 8px; }
+.redact span{ display: inline-block; width: 5px; height: 11px; background: var(--grey-900); border-radius: 1px; }
+
+/* decision chips — the four Google brand colors as verdict language */
+.chip{ display: inline-flex; align-items: center; font-weight: 500; font-size: 12px; padding: 4px 12px; border-radius: 999px; white-space: nowrap; }
+.chip--priority{ color: var(--green); background: var(--green-tint); }
+.chip--shortlist{ color: var(--blue); background: var(--blue-tint); }
+.chip--hold{ color: var(--yellow); background: var(--yellow-bg); }
+.chip--reject{ color: var(--red); background: var(--red-tint); }
+.chip--default{ color: var(--grey-600); background: var(--grey-100); }
+
+.mandatory-tag{ font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 999px; }
+.mandatory-tag--meets{ background: var(--green-tint); color: var(--green); }
+.mandatory-tag--partial{ background: var(--yellow-bg); color: var(--yellow); }
+.mandatory-tag--no{ background: var(--red-tint); color: var(--red); }
+
+/* top candidates grid */
+.top5-grid{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 14px; }
+.top5-card{ background: var(--white); border: 1px solid var(--grey-300); border-radius: var(--radius-lg); padding: 20px; position: relative; }
+.top5-card__rank{
+  font-size: 13px; font-weight: 700; font-family: var(--font-mono); color: #fff;
+  background: var(--blue); border-radius: 50%; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  position: absolute; top: -10px; right: -10px; box-shadow: var(--shadow-1);
+}
+.top5-card__head{ display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.top5-card__id{ font-family: var(--font-mono); font-weight: 600; font-size: 14px; }
+.top5-card__score{ font-family: var(--font-mono); font-size: 12px; color: var(--grey-600); background: var(--grey-100); padding: 2px 8px; border-radius: 999px; }
+.top5-card p{ font-size: 13.5px; margin: 8px 0; color: var(--grey-900); }
+.top5-card__label{ font-size: 11px; font-weight: 500; text-transform: uppercase; color: var(--grey-500); letter-spacing: .04em; margin-top: 12px; }
+.top5-card ul{ margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.top5-card ul li{ margin-bottom: 3px; }
+.top5-card .chip{ margin-top: 12px; }
+
+/* scorecards */
+.scorecard-list{ display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.scorecard{ background: var(--white); border: 1px solid var(--grey-300); border-radius: var(--radius-md); overflow: hidden; scroll-margin-top: 20px; }
+.scorecard summary{ cursor: pointer; list-style: none; padding: 15px 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.scorecard summary::-webkit-details-marker{ display: none; }
+.scorecard summary .chev{ margin-left: auto; color: var(--grey-500); transition: transform .15s ease; font-size: 12px; }
+.scorecard[open] summary .chev{ transform: rotate(90deg); }
+.scorecard__id{ font-family: var(--font-mono); font-weight: 600; font-size: 14px; }
+.scorecard__score{ font-family: var(--font-mono); font-size: 13px; color: var(--grey-600); }
+.scorecard__body{ padding: 4px 18px 20px; border-top: 1px solid var(--grey-100); }
+.scorecard__grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 14px; }
+@media (max-width: 620px){ .scorecard__grid{ grid-template-columns: 1fr; } }
+.scorecard__grid h4{ font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--grey-600); margin: 0 0 6px; }
+.scorecard__grid ul{ margin: 0; padding-left: 18px; font-size: 13px; }
+.scorecard__grid ul li{ margin-bottom: 4px; }
+.scorecard__rationale{ font-size: 13px; font-style: italic; color: var(--grey-600); margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grey-100); }
+
+/* hiring recommendation */
+#recommendationBlock{ font-size: 14px; }
+#recommendationBlock h4{ font-size: 12.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--grey-600); margin: 18px 0 6px; }
+#recommendationBlock h4:first-child{ margin-top: 0; }
+#recommendationBlock ol, #recommendationBlock ul{ margin: 4px 0; padding-left: 20px; }
+#recommendationBlock li{ margin-bottom: 4px; }
+
+/* ============================================================
+   Settings drawer
+   ============================================================ */
+.drawer{ position: fixed; inset: 0; background: rgba(32,33,36,.5); display: flex; justify-content: flex-end; z-index: 50; }
+.drawer__panel{ width: min(400px, 92vw); height: 100%; background: var(--white); padding: 26px; overflow-y: auto; box-shadow: -8px 0 24px rgba(0,0,0,.2); }
+.drawer__head{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.drawer__head h2{ font-size: 19px; font-weight: 500; margin: 0; }
+.drawer__foot{ margin-top: 26px; }
+
+/* ============================================================
+   Footer
+   ============================================================ */
+.deskfoot{ margin-top: 20px; padding: 0 6px; }
+.deskfoot p{ font-size: 12px; color: var(--grey-500); max-width: 70ch; }
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="appbar__inner">
+    <div class="appbar__mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    <div class="appbar__title">
+      <h1>CV Screening Desk</h1>
+      <p>Weighted, evidence-only candidate evaluation — no invented facts, no protected-characteristic inference.</p>
+    </div>
+    <button class="btn btn--outline btn--sm" id="openSettings" type="button">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 10.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z" stroke="currentColor" stroke-width="1.3"/><path d="M13.4 8.9c.05-.3.08-.6.08-.9s-.03-.6-.08-.9l1.4-1.1a.5.5 0 0 0 .12-.63l-1.3-2.25a.5.5 0 0 0-.6-.22l-1.66.67a5.6 5.6 0 0 0-1.56-.9L9.5 1.1a.5.5 0 0 0-.5-.42H7a.5.5 0 0 0-.5.42l-.28 1.76a5.6 5.6 0 0 0-1.56.9l-1.66-.67a.5.5 0 0 0-.6.22L1.1 5.56a.5.5 0 0 0 .12.63l1.4 1.1c-.05.3-.08.6-.08.9s.03.6.08.9l-1.4 1.1a.5.5 0 0 0-.12.63l1.3 2.25c.12.21.38.3.6.22l1.66-.67c.47.38.99.68 1.56.9l.28 1.76c.05.24.26.42.5.42h2a.5.5 0 0 0 .5-.42l.28-1.76c.57-.22 1.09-.52 1.56-.9l1.66.67c.22.08.48-.01.6-.22l1.3-2.25a.5.5 0 0 0-.12-.63l-1.4-1.1Z" stroke="currentColor" stroke-width="1.3"/></svg>
+      Settings
+    </button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="tabs" aria-label="Workflow steps">
+    <button class="tab is-active" data-tab="jd" type="button">1 · Job description</button>
+    <button class="tab" data-tab="candidates" type="button">2 · Candidates <span class="tab__count" id="candidateCount">0</span></button>
+    <button class="tab" data-tab="results" type="button">3 · Run &amp; results</button>
+  </nav>
+
+  <main class="card">
+
+    <!-- ===== STEP 1: Job description ===== -->
+    <section class="panel is-active" id="panel-jd">
+      <div class="panel__head">
+        <h2>Job description</h2>
+        <p>Paste the full JD below, including mandatory requirements. The evaluator builds its weighting matrix directly from this text.</p>
+      </div>
+
+      <label class="field-label" for="jdText">Job description text</label>
+      <textarea id="jdText" class="textarea textarea--tall" placeholder="Paste the complete job description here — title, mandatory requirements, preferred skills, responsibilities, and eligibility criteria..."></textarea>
+
+      <div class="jd-upload-row">
+        <label class="btn btn--outline btn--sm file-btn">
+          Upload JD file instead (.txt, .pdf, .docx)
+          <input type="file" id="jdFile" accept=".txt,.pdf,.docx" hidden>
+        </label>
+        <span class="jd-upload-row__hint" id="jdFileStatus"></span>
+      </div>
+
+      <div class="panel__foot" style="justify-content:flex-end;">
+        <button class="btn btn--filled" id="toCandidates" type="button">Next: add candidates →</button>
+      </div>
+    </section>
+
+    <!-- ===== STEP 2: Candidates ===== -->
+    <section class="panel" id="panel-candidates">
+      <div class="panel__head">
+        <h2>Candidate resumes</h2>
+        <p>Add up to 20 candidates. Names are optional — a candidate ID is enough, and evaluation only uses job-related content.</p>
+      </div>
+
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload resumes">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4M12 4L7 9M12 4l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h3>Upload all resumes at once</h3>
+        <p>Drag files here, or click to browse — select multiple .txt, .pdf, or .docx files together. Each becomes one candidate card.</p>
+        <input type="file" id="bulkFiles" accept=".txt,.pdf,.docx" multiple>
+      </div>
+      <div class="upload-status" id="bulkFileStatus"></div>
+
+      <div class="divider-row">or add one at a time</div>
+
+      <div class="candidate-list" id="candidateList"></div>
+
+      <button class="btn btn--outline btn--sm" id="addCandidate" type="button">+ Add a candidate manually</button>
+
+      <div class="panel__foot">
+        <button class="btn btn--text" data-tab="jd" type="button">← Back</button>
+        <button class="btn btn--filled" id="toResults" type="button">Next: run evaluation →</button>
+      </div>
+    </section>
+
+    <!-- ===== STEP 3: Run + Results ===== -->
+    <section class="panel" id="panel-results">
+      <div class="panel__head">
+        <h2>Run &amp; results</h2>
+        <p>Review runs entirely in your browser and calls the free Gemini API directly — no sign-in needed unless a key is required below.</p>
+      </div>
+
+      <div class="run-bar">
+        <button class="btn btn--filled btn--lg" id="runEval" type="button">Run evaluation</button>
+        <div class="run-bar__meta" id="runMeta">Add a JD and at least one candidate to begin.</div>
+      </div>
+
+      <div class="loading" id="loading" hidden>
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="loadingMsg">Reading candidate files…</p>
+      </div>
+
+      <div class="error-box" id="errorBox" hidden></div>
+
+      <div class="results" id="results" hidden>
+
+        <div class="export-row">
+          <button class="btn btn--outline btn--sm" id="downloadJson" type="button">Download full results (.json)</button>
+          <button class="btn btn--outline btn--sm" id="downloadCsv" type="button">Download ranking (.csv)</button>
+        </div>
+
+        <article class="doc-block" id="block-matrix">
+          <h3>JD evaluation matrix</h3>
+          <div class="table-wrap"><table class="gtable" id="matrixTable"></table></div>
+          <div class="knockout-box" id="knockoutBox"></div>
+        </article>
+
+        <article class="doc-block" id="block-ranking">
+          <h3>Full ranking</h3>
+          <p class="doc-block__hint">Click a row to jump to that candidate's full scorecard.</p>
+          <div class="table-wrap"><table class="gtable gtable--clickable" id="rankingTable"></table></div>
+        </article>
+
+        <article class="doc-block" id="block-top5">
+          <h3>Top priority candidates</h3>
+          <div class="top5-grid" id="top5Grid"></div>
+        </article>
+
+        <article class="doc-block" id="block-scorecards">
+          <h3>Candidate-by-candidate scorecards</h3>
+          <div class="scorecard-list" id="scorecardList"></div>
+        </article>
+
+        <article class="doc-block" id="block-recommendation">
+          <h3>Hiring recommendation</h3>
+          <div id="recommendationBlock"></div>
+        </article>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="deskfoot">
+    <p>Evaluations are generated by a language model from the text you provide. Treat scores as a decision aid — validate mandatory-criteria gaps and top-candidate claims before making hiring decisions.</p>
+  </footer>
+</div>
+
+<!-- ===== Settings drawer ===== -->
+<div class="drawer" id="settingsDrawer" hidden>
+  <div class="drawer__panel">
+    <div class="drawer__head">
+      <h2>Settings</h2>
+      <button class="btn btn--text btn--icon" id="closeSettings" type="button" aria-label="Close">✕</button>
+    </div>
+
+    <div class="field-hint" style="background:var(--yellow-bg); color:var(--yellow); padding:10px 12px; border-radius:var(--radius-sm); margin-bottom:4px;">
+      This app runs on the free Gemini API. Free-tier requests may be used by Google to improve their products — avoid this for sensitive candidate data unless that's acceptable, or use your own key on a billed project for stricter data handling.
+    </div>
+
+    <label class="field-label" for="apiKey">Google AI Studio API key</label>
+    <input type="password" id="apiKey" class="input" placeholder="Leave blank to use the shared key, or paste your own">
+    <p class="field-hint">This page ships with a shared free key so it works with no sign-in. Paste your own free key here to use your own quota instead (get one in under a minute at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> — no credit card). Stored only in this browser tab unless you check "remember" below.</p>
+
+    <label class="checkbox">
+      <input type="checkbox" id="rememberKey">
+      Remember my key on this device (localStorage)
+    </label>
+
+    <label class="field-label" for="modelSelect">Model</label>
+    <input id="modelSelect" class="input" list="modelOptions" value="gemini-2.5-flash">
+    <datalist id="modelOptions">
+      <option value="gemini-2.5-flash-lite">Flash-Lite — fastest, most generous free quota</option>
+      <option value="gemini-2.5-flash">Flash — balanced, recommended</option>
+      <option value="gemini-2.5-pro">Pro — strongest reasoning, smallest free quota</option>
+    </datalist>
+    <p class="field-hint">Google updates free-tier model names occasionally — check the current list at <a href="https://aistudio.google.com" target="_blank" rel="noopener">aistudio.google.com</a> if a model stops responding, and type a different one here.</p>
+
+    <label class="field-label" for="maxTokens">Max output tokens</label>
+    <input type="number" id="maxTokens" class="input" value="8192" min="2000" max="32000" step="1000">
+    <p class="field-hint">Raise this if a run gets cut off with many candidates (each scorecard adds ~300–500 tokens).</p>
+
+    <div class="drawer__foot">
+      <button class="btn btn--filled" id="saveSettings" type="button">Save settings</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script>
+/* ============================================================
+   parse.js equivalent — client-side text extraction
+   ============================================================ */
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+async function extractTextFromFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".txt") || name.endsWith(".md")) return await file.text();
+  if (name.endsWith(".pdf")) return await extractPdfText(file);
+  if (name.endsWith(".docx")) return await extractDocxText(file);
+  throw new Error(`Unsupported file type: ${file.name}. Use .txt, .pdf, or .docx.`);
+}
+
+async function extractPdfText(file) {
+  if (!window.pdfjsLib) throw new Error("PDF reader failed to load. Check your internet connection and reload the page.");
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let text = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map((item) => item.str).join(" ") + "\n\n";
+  }
+  return text.trim();
+}
+
+async function extractDocxText(file) {
+  if (!window.mammoth) throw new Error("DOCX reader failed to load. Check your internet connection and reload the page.");
+  const buffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+  return result.value.trim();
+}
+
+function idFromFilename(filename) {
+  return filename.replace(/\.(pdf|docx|txt|md)$/i, "").replace(/[_-]+/g, " ").trim();
+}
+
+/* ============================================================
+   api.js equivalent — prompt construction + Gemini call
+   ============================================================ */
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
+// Fallback key so the page works with zero setup for people you share it with.
+// Create your own free key at https://aistudio.google.com/apikey (no credit card)
+// and paste it below before deploying. Keep billing OFF on that Google Cloud
+// project — then even heavy or abusive use can only hit rate limits, never a bill.
+const SHARED_FREE_KEY = "PASTE_YOUR_FREE_GEMINI_KEY_HERE";
+
+function buildSystemPrompt() {
+  return `You are an experienced HR recruiter and ATS-style candidate evaluator.
+
+Task: Evaluate the supplied candidate resumes against the supplied Job Description (JD), score every candidate objectively, and identify the top candidates for priority interview shortlisting.
+
+## Evaluation Principles
+- Evaluate only evidence explicitly available in the JD and CV. Do not invent experience, qualifications, achievements, or skills.
+- Use the JD's mandatory requirements as higher-priority filters than preferred requirements.
+- Consider transferable skills, but state clearly when they are transferable rather than directly demonstrated.
+- Be consistent: apply the same scoring standard to every resume.
+- Do not use or infer protected characteristics, including age, gender, caste, religion, marital status, disability, ethnicity, nationality, photo, or name-based assumptions.
+- Treat candidate names/IDs as labels only. Assess job-related qualifications only.
+- Flag major risks such as missing mandatory qualifications, insufficient relevant experience, unexplained role mismatch, or unsupported claims.
+
+## Step 1: Extract JD Criteria
+Convert the JD into a weighted evaluation matrix totaling 100 points.
+
+Use this default weighting, adapting it only when the JD clearly requires a different emphasis:
+- Mandatory skills / technical competencies: 30 points
+- Relevant work experience and domain fit: 25 points
+- Key responsibilities / role-specific evidence: 15 points
+- Education, certifications, and mandatory eligibility: 10 points
+- Tools, analytics, communication, and stakeholder skills: 10 points
+- Quantified achievements and impact: 5 points
+- Preferred qualifications / cultural or team fit evidence: 5 points
+
+For each criterion, label it as one of: "Mandatory", "Strongly preferred", "Preferred".
+
+State any knockout criteria. A candidate who misses a true mandatory requirement should be marked "Not Recommended" unless the JD indicates equivalent experience is acceptable.
+
+## Step 2: Score Each Resume
+For every candidate, determine: total score out of 100, rating band, mandatory-criteria status, a requirement-by-requirement score with evidence, top strengths (max 3), key gaps/risks (max 3), a shortlisting decision, and a one-sentence recruiter rationale.
+
+Rating bands:
+- 90-100: Exceptional match — priority interview
+- 80-89: Strong match — shortlist
+- 70-79: Good match — consider if interview capacity permits
+- 60-69: Partial match — hold / talent pool
+- Below 60: Weak match — do not prioritize
+
+Decisions: "Priority Interview", "Shortlist", "Hold / Secondary Review", "Not Recommended".
+
+## Step 3: Rank All Candidates
+Rank every candidate in descending order of total score. For candidates with equal scores, break ties in this order: (1) meets more mandatory requirements, (2) more directly relevant experience, (3) more quantified and recent achievements, (4) better evidence of core tools and responsibilities in the JD. Apply this tie-break yourself and return the already-resolved order.
+
+## Step 4: Top Priority Candidates
+Identify the top candidates (up to 5, fewer if the pool is smaller or weak) for a detailed priority list: why they fit the JD, key CV evidence, risks to validate at interview, recommended next step, a concise 3-5 line HR assessment, two targeted interview questions designed to validate the most important skill or close the biggest evidence gap, and a recommended interview priority ("Immediate", "First Round", or "Backup Shortlist").
+
+## Step 5: Hiring Recommendation
+Conclude with: the recommended interview order for the top candidates, common skill gaps across the applicant pool, whether the applicant pool sufficiently meets the JD or sourcing should continue, and any JD requirements that appear unrealistically restrictive or unclear based on the resumes actually received.
+
+## Output format — CRITICAL
+Respond with ONLY a single valid JSON object. No markdown, no code fences, no commentary before or after it. The JSON must match this exact shape:
+
+{
+  "jd_matrix": {
+    "criteria": [
+      { "name": string, "category": "Mandatory" | "Strongly preferred" | "Preferred", "weight": number, "description": string }
+    ],
+    "knockout_criteria": [string]
+  },
+  "candidates": [
+    {
+      "id": string,
+      "total_score": number,
+      "rating_band": string,
+      "mandatory_status": "Meets" | "Partially Meets" | "Does Not Meet",
+      "requirement_scores": [
+        { "requirement": string, "score": number, "max": number, "evidence": string }
+      ],
+      "strengths": [string],
+      "gaps": [string],
+      "decision": "Priority Interview" | "Shortlist" | "Hold / Secondary Review" | "Not Recommended",
+      "rationale": string
+    }
+  ],
+  "ranking": [
+    { "rank": number, "id": string, "score": number, "rating": string, "mandatory": string, "decision": string, "reason": string }
+  ],
+  "top_candidates": [
+    {
+      "priority": number,
+      "id": string,
+      "score": number,
+      "why_fits": string,
+      "key_evidence": string,
+      "risks": string,
+      "next_step": string,
+      "hr_assessment": string,
+      "interview_questions": [string, string],
+      "interview_priority": "Immediate" | "First Round" | "Backup Shortlist"
+    }
+  ],
+  "hiring_recommendation": {
+    "interview_order": [string],
+    "common_gaps": [string],
+    "pool_sufficiency": string,
+    "unrealistic_requirements": string
+  }
+}
+
+Rules for the JSON:
+- "ranking" must include every candidate provided, in final ranked order.
+- "candidates" must include every candidate provided, in the same order as "ranking".
+- Use "Not stated in resume" (as a string, inside the relevant field) wherever information is missing rather than inventing it.
+- Keep strings factual and concise. Do not use markdown formatting inside string values.
+- Output nothing outside the JSON object.`;
+}
+
+function buildUserPrompt(jdText, candidates) {
+  const resumeBlocks = candidates
+    .map((c, i) => `Resume ${i + 1} — ${c.id || `Candidate ${i + 1}`}\n${c.text}`)
+    .join("\n\n---\n\n");
+  return `## Job Description\n\n${jdText}\n\n## Candidate Resumes (${candidates.length} total)\n\n${resumeBlocks}`;
+}
+
+async function callGemini({ apiKey, model, maxTokens, jdText, candidates }) {
+  const key = (apiKey || "").trim() || SHARED_FREE_KEY;
+  if (!key || key === "PASTE_YOUR_FREE_GEMINI_KEY_HERE") {
+    throw new Error("No Gemini API key is set up yet. Get a free one at aistudio.google.com/apikey and paste it into Settings.");
+  }
+
+  const url = `${GEMINI_API_BASE}/${encodeURIComponent(model)}:generateContent`;
+  const body = {
+    systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
+    contents: [{ role: "user", parts: [{ text: buildUserPrompt(jdText, candidates) }] }],
+    generationConfig: {
+      maxOutputTokens: maxTokens,
+      responseMimeType: "application/json"
+    }
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": key
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const errJson = await response.json();
+      detail = errJson?.error?.message || JSON.stringify(errJson);
+    } catch {
+      detail = await response.text();
+    }
+    if (response.status === 429) {
+      detail += " — the free tier's rate limit was hit. Wait a minute and try again, or use your own key in Settings.";
+    }
+    throw new Error(`Gemini API error (${response.status}): ${detail}`);
+  }
+
+  const data = await response.json();
+
+  if (data.promptFeedback?.blockReason) {
+    throw new Error(`Gemini blocked this request (${data.promptFeedback.blockReason}). Check the JD/resume text for anything that might trip content filters.`);
+  }
+
+  const candidate = (data.candidates || [])[0];
+  const text = (candidate?.content?.parts || []).map((p) => p.text || "").join("");
+
+  if (!text.trim()) {
+    if (candidate?.finishReason === "MAX_TOKENS") {
+      throw new Error("The response was cut off before finishing. Raise \"Max output tokens\" in Settings and try again.");
+    }
+    throw new Error("The model returned no text content. Try again or increase max output tokens.");
+  }
+  return parseModelJson(text);
+}
+
+function parseModelJson(text) {
+  let cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) {
+      try { return JSON.parse(cleaned.slice(start, end + 1)); }
+      catch (e2) { throw new Error("Couldn't parse the model's response as JSON. It may have been cut off — try raising max output tokens in Settings, or re-run."); }
+    }
+    throw new Error("Couldn't parse the model's response as JSON. Try again or raise max output tokens in Settings.");
+  }
+}
+
+/* ============================================================
+   render.js equivalent — result → DOM
+   ============================================================ */
+function escapeHtml(str) {
+  if (str === undefined || str === null) return "";
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function redactMark() { return `<span class="redact" aria-hidden="true"><span></span><span></span><span></span></span>`; }
+function chipClass(decision) {
+  const d = (decision || "").toLowerCase();
+  if (d.includes("priority")) return "chip--priority";
+  if (d.includes("shortlist")) return "chip--shortlist";
+  if (d.includes("hold")) return "chip--hold";
+  if (d.includes("not recommended")) return "chip--reject";
+  return "chip--default";
+}
+function mandatoryTagClass(status) {
+  const s = (status || "").toLowerCase();
+  if (s.includes("does not")) return "mandatory-tag--no";
+  if (s.includes("partial")) return "mandatory-tag--partial";
+  return "mandatory-tag--meets";
+}
+function scorecardAnchorId(id) { return "sc-" + String(id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""); }
+
+function renderMatrix(matrix) {
+  const table = document.getElementById("matrixTable");
+  const criteria = matrix?.criteria || [];
+  let html = `<thead><tr><th>Criterion</th><th>Category</th><th class="num">Weight</th></tr></thead><tbody>`;
+  criteria.forEach((c) => {
+    html += `<tr>
+      <td><strong>${escapeHtml(c.name)}</strong><br><span style="color:var(--grey-600); font-size:12px;">${escapeHtml(c.description || "")}</span></td>
+      <td>${escapeHtml(c.category)}</td>
+      <td class="num">${escapeHtml(c.weight)}</td>
+    </tr>`;
+  });
+  html += `</tbody>`;
+  table.innerHTML = html;
+
+  const knockoutBox = document.getElementById("knockoutBox");
+  const knockouts = matrix?.knockout_criteria || [];
+  knockoutBox.innerHTML = knockouts.length
+    ? `<div class="field-label" style="margin:0 0 6px;">Knockout criteria</div>` + knockouts.map((k) => `<div class="ko-item">${escapeHtml(k)}</div>`).join("")
+    : "";
+}
+
+function renderRanking(ranking) {
+  const table = document.getElementById("rankingTable");
+  let html = `<thead><tr><th class="num">Rank</th><th>Candidate</th><th class="num">Score</th><th>Rating</th><th>Mandatory</th><th>Decision</th><th>Reason</th></tr></thead><tbody>`;
+  (ranking || []).forEach((r) => {
+    html += `<tr data-target="${scorecardAnchorId(r.id)}">
+      <td class="num">${escapeHtml(r.rank)}</td>
+      <td>${redactMark()}<span style="font-family:var(--font-mono);">${escapeHtml(r.id)}</span></td>
+      <td class="num">${escapeHtml(r.score)}</td>
+      <td>${escapeHtml(r.rating)}</td>
+      <td><span class="mandatory-tag ${mandatoryTagClass(r.mandatory)}">${escapeHtml(r.mandatory)}</span></td>
+      <td><span class="chip ${chipClass(r.decision)}">${escapeHtml(r.decision)}</span></td>
+      <td>${escapeHtml(r.reason)}</td>
+    </tr>`;
+  });
+  html += `</tbody>`;
+  table.innerHTML = html;
+  table.querySelectorAll("tbody tr").forEach((tr) => {
+    tr.addEventListener("click", () => {
+      const target = document.getElementById(tr.dataset.target);
+      if (target) { target.open = true; target.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    });
+  });
+}
+
+function renderTop5(topCandidates) {
+  const grid = document.getElementById("top5Grid");
+  grid.innerHTML = (topCandidates || []).map((t) => `
+      <div class="top5-card">
+        <div class="top5-card__rank">${escapeHtml(t.priority)}</div>
+        <div class="top5-card__head">
+          ${redactMark()}
+          <span class="top5-card__id">${escapeHtml(t.id)}</span>
+          <span class="top5-card__score">${escapeHtml(t.score)}/100</span>
+        </div>
+        <p>${escapeHtml(t.hr_assessment)}</p>
+        <div class="top5-card__label">Key evidence</div>
+        <p>${escapeHtml(t.key_evidence)}</p>
+        <div class="top5-card__label">Validate at interview</div>
+        <p>${escapeHtml(t.risks)}</p>
+        <div class="top5-card__label">Interview questions</div>
+        <ul>${(t.interview_questions || []).map((q) => `<li>${escapeHtml(q)}</li>`).join("")}</ul>
+        <span class="chip ${chipClass(t.interview_priority === "Immediate" ? "priority" : t.interview_priority)}">${escapeHtml(t.interview_priority)}</span>
+      </div>
+    `).join("");
+}
+
+function renderScorecards(candidates) {
+  const list = document.getElementById("scorecardList");
+  list.innerHTML = (candidates || []).map((c) => `
+      <details class="scorecard" id="${scorecardAnchorId(c.id)}">
+        <summary>
+          ${redactMark()}
+          <span class="scorecard__id">${escapeHtml(c.id)}</span>
+          <span class="scorecard__score">${escapeHtml(c.total_score)}/100 · ${escapeHtml(c.rating_band)}</span>
+          <span class="mandatory-tag ${mandatoryTagClass(c.mandatory_status)}">${escapeHtml(c.mandatory_status)}</span>
+          <span class="chip ${chipClass(c.decision)}">${escapeHtml(c.decision)}</span>
+          <span class="chev">▸</span>
+        </summary>
+        <div class="scorecard__body">
+          <div class="table-wrap">
+            <table class="gtable">
+              <thead><tr><th>Requirement</th><th class="num">Score</th><th>Evidence</th></tr></thead>
+              <tbody>
+                ${(c.requirement_scores || []).map((r) => `<tr>
+                      <td>${escapeHtml(r.requirement)}</td>
+                      <td class="num">${escapeHtml(r.score)}/${escapeHtml(r.max)}</td>
+                      <td>${escapeHtml(r.evidence)}</td>
+                    </tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="scorecard__grid">
+            <div><h4>Top strengths</h4><ul>${(c.strengths || []).map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul></div>
+            <div><h4>Key gaps / risks</h4><ul>${(c.gaps || []).map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul></div>
+          </div>
+          <p class="scorecard__rationale">"${escapeHtml(c.rationale)}"</p>
+        </div>
+      </details>
+    `).join("");
+}
+
+function renderRecommendation(rec) {
+  const el = document.getElementById("recommendationBlock");
+  if (!rec) { el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <h4>Recommended interview order</h4>
+    <ol>${(rec.interview_order || []).map((id) => `<li>${redactMark()}${escapeHtml(id)}</li>`).join("")}</ol>
+    <h4>Common skill gaps across the pool</h4>
+    <ul>${(rec.common_gaps || []).map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul>
+    <h4>Does the pool meet the JD?</h4>
+    <p>${escapeHtml(rec.pool_sufficiency)}</p>
+    <h4>Unrealistic or unclear JD requirements</h4>
+    <p>${escapeHtml(rec.unrealistic_requirements)}</p>
+  `;
+}
+
+function renderResults(result) {
+  renderMatrix(result.jd_matrix);
+  renderRanking(result.ranking);
+  renderTop5(result.top_candidates);
+  renderScorecards(result.candidates);
+  renderRecommendation(result.hiring_recommendation);
+}
+
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function csvEscape(val) { const s = String(val ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+function rankingToCsv(ranking) {
+  const header = ["Rank", "Candidate", "Score", "Rating", "Mandatory", "Decision", "Reason"];
+  const rows = (ranking || []).map((r) => [r.rank, r.id, r.score, r.rating, r.mandatory, r.decision, r.reason]);
+  return [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+}
+
+/* ============================================================
+   app.js equivalent — state, tabs, candidate list, wiring
+   ============================================================ */
+const state = {
+  candidates: [],
+  lastResult: null,
+  settings: { apiKey: "", model: "gemini-2.5-flash", maxTokens: 8192, remember: false }
+};
+let uidCounter = 0;
+const nextUid = () => `c${++uidCounter}`;
+
+function loadSettings() {
+  const remembered = localStorage.getItem("cvdesk_settings");
+  if (remembered) {
+    try { Object.assign(state.settings, JSON.parse(remembered), { remember: true }); } catch {}
+  }
+  document.getElementById("apiKey").value = state.settings.apiKey;
+  document.getElementById("modelSelect").value = state.settings.model;
+  document.getElementById("maxTokens").value = state.settings.maxTokens;
+  document.getElementById("rememberKey").checked = state.settings.remember;
+}
+
+function saveSettings() {
+  state.settings.apiKey = document.getElementById("apiKey").value.trim();
+  state.settings.model = document.getElementById("modelSelect").value;
+  state.settings.maxTokens = parseInt(document.getElementById("maxTokens").value, 10) || 8192;
+  state.settings.remember = document.getElementById("rememberKey").checked;
+  if (state.settings.remember) localStorage.setItem("cvdesk_settings", JSON.stringify(state.settings));
+  else localStorage.removeItem("cvdesk_settings");
+  closeDrawer();
+  updateRunBar();
+}
+
+function openDrawer() { document.getElementById("settingsDrawer").hidden = false; }
+function closeDrawer() { document.getElementById("settingsDrawer").hidden = true; }
+
+function activateTab(tabName) {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("is-active", t.dataset.tab === tabName));
+  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("is-active", p.id === `panel-${tabName}`));
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function addCandidate({ id = "", text = "" } = {}) {
+  state.candidates.push({ uid: nextUid(), id, text });
+  renderCandidateList();
+}
+function removeCandidate(uid) {
+  state.candidates = state.candidates.filter((c) => c.uid !== uid);
+  renderCandidateList();
+}
+
+function renderCandidateList() {
+  const container = document.getElementById("candidateList");
+
+  if (state.candidates.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M5 7h14l-1 13H6L5 7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <p>No candidates yet — upload resumes above, or add one manually.</p>
+      </div>`;
+  } else {
+    container.innerHTML = state.candidates.map((c, i) => `
+      <div class="candidate-card" data-uid="${c.uid}">
+        <div class="candidate-card__row">
+          <div class="candidate-card__badge">${i + 1}</div>
+          <input class="candidate-card__id" type="text" placeholder="Candidate ID or name, e.g. Candidate ${i + 1}" value="${escapeHtml(c.id)}" data-field="id">
+          <button class="candidate-card__remove" type="button" data-action="remove">Remove</button>
+        </div>
+        <textarea placeholder="Paste this candidate's resume text here..." data-field="text">${escapeHtml(c.text)}</textarea>
+        <div class="candidate-card__meta">${c.text ? `${c.text.trim().split(/\s+/).length} words` : "No resume text yet"}</div>
+      </div>
+    `).join("");
+
+    container.querySelectorAll(".candidate-card").forEach((card) => {
+      const uid = card.dataset.uid;
+      card.querySelector('[data-field="id"]').addEventListener("input", (e) => {
+        const c = state.candidates.find((x) => x.uid === uid);
+        if (c) c.id = e.target.value;
+      });
+      card.querySelector('[data-field="text"]').addEventListener("input", (e) => {
+        const c = state.candidates.find((x) => x.uid === uid);
+        if (c) c.text = e.target.value;
+        card.querySelector(".candidate-card__meta").textContent = e.target.value.trim()
+          ? `${e.target.value.trim().split(/\s+/).length} words` : "No resume text yet";
+      });
+      card.querySelector('[data-action="remove"]').addEventListener("click", () => removeCandidate(uid));
+    });
+  }
+
+  document.getElementById("candidateCount").textContent = state.candidates.length;
+  updateRunBar();
+}
+
+/* ---------- JD file upload ---------- */
+document.getElementById("jdFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const status = document.getElementById("jdFileStatus");
+  status.textContent = `Reading ${file.name}…`;
+  try {
+    const text = await extractTextFromFile(file);
+    document.getElementById("jdText").value = text;
+    status.textContent = `Loaded ${file.name} (${text.trim().split(/\s+/).length} words).`;
+    updateRunBar();
+  } catch (err) { status.textContent = err.message; }
+  e.target.value = "";
+});
+
+/* ---------- Bulk resume upload (click + drag & drop) ---------- */
+async function processResumeFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  const status = document.getElementById("bulkFileStatus");
+  let done = 0;
+  for (const file of files) {
+    status.textContent = `Reading ${file.name}… (${done + 1}/${files.length})`;
+    try {
+      const text = await extractTextFromFile(file);
+      addCandidate({ id: idFromFilename(file.name), text });
+    } catch (err) {
+      status.textContent = `Couldn't read ${file.name}: ${err.message}`;
+    }
+    done++;
+  }
+  status.textContent = `Added ${files.length} candidate${files.length === 1 ? "" : "s"} from uploaded files.`;
+}
+
+const dropzone = document.getElementById("dropzone");
+const bulkInput = document.getElementById("bulkFiles");
+
+dropzone.addEventListener("click", () => bulkInput.click());
+dropzone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); bulkInput.click(); } });
+bulkInput.addEventListener("change", (e) => { processResumeFiles(e.target.files); e.target.value = ""; });
+
+["dragenter", "dragover"].forEach((evt) =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add("is-dragover"); })
+);
+["dragleave", "dragend"].forEach((evt) =>
+  dropzone.addEventListener(evt, () => dropzone.classList.remove("is-dragover"))
+);
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("is-dragover");
+  processResumeFiles(e.dataTransfer.files);
+});
+
+document.getElementById("addCandidate").addEventListener("click", () => addCandidate());
+
+function updateRunBar() {
+  const jdText = document.getElementById("jdText").value.trim();
+  const hasCandidates = state.candidates.some((c) => c.text.trim().length > 0);
+  const ownKey = document.getElementById("apiKey").value.trim();
+  const sharedKeyReady = SHARED_FREE_KEY && SHARED_FREE_KEY !== "PASTE_YOUR_FREE_GEMINI_KEY_HERE";
+  const hasKey = !!ownKey || sharedKeyReady;
+  const runBtn = document.getElementById("runEval");
+  const meta = document.getElementById("runMeta");
+
+  const missing = [];
+  if (!jdText) missing.push("a job description");
+  if (!hasCandidates) missing.push("at least one candidate with resume text");
+  if (!hasKey) missing.push("a free Gemini API key (see Settings)");
+
+  runBtn.disabled = missing.length > 0;
+  meta.textContent = missing.length
+    ? `Add ${missing.join(", ")} to run an evaluation.`
+    : `Ready — ${state.candidates.filter((c) => c.text.trim()).length} candidate(s) against the job description.`;
+}
+
+async function runEvaluation() {
+  const jdText = document.getElementById("jdText").value.trim();
+  const candidates = state.candidates
+    .filter((c) => c.text.trim())
+    .map((c, i) => ({ id: c.id.trim() || `Candidate ${i + 1}`, text: c.text.trim() }));
+
+  const loading = document.getElementById("loading");
+  const errorBox = document.getElementById("errorBox");
+  const results = document.getElementById("results");
+  const runBtn = document.getElementById("runEval");
+
+  errorBox.hidden = true; results.hidden = true; loading.hidden = false; runBtn.disabled = true;
+
+  const messages = ["Reading candidate files…", "Building the weighting matrix…", "Scoring each candidate against the JD…", "Ranking and drafting interview questions…"];
+  let mi = 0;
+  const msgTimer = setInterval(() => { mi = (mi + 1) % messages.length; document.getElementById("loadingMsg").textContent = messages[mi]; }, 3500);
+  document.getElementById("loadingMsg").textContent = messages[0];
+
+  try {
+    const result = await callGemini({
+      apiKey: state.settings.apiKey || document.getElementById("apiKey").value.trim(),
+      model: document.getElementById("modelSelect").value,
+      maxTokens: parseInt(document.getElementById("maxTokens").value, 10) || 8192,
+      jdText, candidates
+    });
+    state.lastResult = result;
+    renderResults(result);
+    results.hidden = false;
+  } catch (err) {
+    errorBox.hidden = false;
+    errorBox.textContent = err.message || "Something went wrong calling the Gemini API.";
+  } finally {
+    clearInterval(msgTimer);
+    loading.hidden = true;
+    runBtn.disabled = false;
+    updateRunBar();
+  }
+}
+
+document.querySelectorAll("[data-tab]").forEach((el) => el.addEventListener("click", () => activateTab(el.dataset.tab)));
+document.getElementById("toCandidates").addEventListener("click", () => activateTab("candidates"));
+document.getElementById("toResults").addEventListener("click", () => activateTab("results"));
+
+document.getElementById("openSettings").addEventListener("click", openDrawer);
+document.getElementById("closeSettings").addEventListener("click", closeDrawer);
+document.getElementById("saveSettings").addEventListener("click", saveSettings);
+document.getElementById("settingsDrawer").addEventListener("click", (e) => { if (e.target.id === "settingsDrawer") closeDrawer(); });
+
+document.getElementById("jdText").addEventListener("input", updateRunBar);
+document.getElementById("apiKey").addEventListener("input", updateRunBar);
+
+document.getElementById("runEval").addEventListener("click", runEvaluation);
+
+document.getElementById("downloadJson").addEventListener("click", () => {
+  if (!state.lastResult) return;
+  downloadFile("cv-screening-results.json", JSON.stringify(state.lastResult, null, 2), "application/json");
+});
+document.getElementById("downloadCsv").addEventListener("click", () => {
+  if (!state.lastResult) return;
+  downloadFile("cv-screening-ranking.csv", rankingToCsv(state.lastResult.ranking), "text/csv");
+});
+
+loadSettings();
+renderCandidateList();
+updateRunBar();
+</script>
+</body>
+</html>
