@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CV Screening Desk — AI Candidate Evaluation</title>
+<meta name="description" content="Paste a job description and candidate resumes, get a weighted, bias-checked shortlist powered by Claude.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,900&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="desk">
+
+  <!-- ===== Masthead ===== -->
+  <header class="masthead">
+    <div class="masthead__mark" aria-hidden="true">
+      <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+        <rect x="1" y="4" width="32" height="26" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M1 10.5H33" stroke="currentColor" stroke-width="1.6"/>
+        <rect x="5.5" y="15" width="9" height="2.4" fill="currentColor"/>
+        <rect x="5.5" y="20" width="14" height="2.4" fill="currentColor"/>
+      </svg>
+    </div>
+    <div class="masthead__title">
+      <h1>CV Screening Desk</h1>
+      <p>Weighted, evidence-only candidate evaluation — no invented facts, no protected-characteristic inference.</p>
+    </div>
+    <button class="btn btn--ghost masthead__settings" id="openSettings" type="button">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 10.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z" stroke="currentColor" stroke-width="1.3"/><path d="M13.4 8.9c.05-.3.08-.6.08-.9s-.03-.6-.08-.9l1.4-1.1a.5.5 0 0 0 .12-.63l-1.3-2.25a.5.5 0 0 0-.6-.22l-1.66.67a5.6 5.6 0 0 0-1.56-.9L9.5 1.1a.5.5 0 0 0-.5-.42H7a.5.5 0 0 0-.5.42l-.28 1.76a5.6 5.6 0 0 0-1.56.9l-1.66-.67a.5.5 0 0 0-.6.22L1.1 5.56a.5.5 0 0 0 .12.63l1.4 1.1c-.05.3-.08.6-.08.9s.03.6.08.9l-1.4 1.1a.5.5 0 0 0-.12.63l1.3 2.25c.12.21.38.3.6.22l1.66-.67c.47.38.99.68 1.56.9l.28 1.76c.05.24.26.42.5.42h2a.5.5 0 0 0 .5-.42l.28-1.76c.57-.22 1.09-.52 1.56-.9l1.66.67c.22.08.48-.01.6-.22l1.3-2.25a.5.5 0 0 0-.12-.63l-1.4-1.1Z" stroke="currentColor" stroke-width="1.3"/></svg>
+      Settings
+    </button>
+  </header>
+
+  <!-- ===== Folder tab navigation ===== -->
+  <nav class="tabs" aria-label="Workflow steps">
+    <button class="tab is-active" data-tab="jd" type="button"><span class="tab__index">1</span> Job Description</button>
+    <button class="tab" data-tab="candidates" type="button"><span class="tab__index">2</span> Candidates <span class="tab__count" id="candidateCount">0</span></button>
+    <button class="tab" data-tab="results" type="button"><span class="tab__index">3</span> Run &amp; Results</button>
+  </nav>
+
+  <main class="sheet">
+
+    <!-- ===== STEP 1: Job description ===== -->
+    <section class="panel is-active" id="panel-jd">
+      <div class="panel__head">
+        <h2>Job description</h2>
+        <p>Paste the full JD below, including mandatory requirements. The evaluator builds its weighting matrix directly from this text.</p>
+      </div>
+
+      <label class="field-label" for="jdText">Job description text</label>
+      <textarea id="jdText" class="textarea textarea--tall" placeholder="Paste the complete job description here — title, mandatory requirements, preferred skills, responsibilities, and eligibility criteria..."></textarea>
+
+      <div class="upload-row">
+        <label class="btn btn--outline file-btn">
+          Upload JD file (.txt, .pdf, .docx)
+          <input type="file" id="jdFile" accept=".txt,.pdf,.docx" hidden>
+        </label>
+        <span class="upload-row__hint" id="jdFileStatus"></span>
+      </div>
+
+      <div class="panel__foot">
+        <button class="btn btn--primary" id="toCandidates" type="button">Next: add candidates →</button>
+      </div>
+    </section>
+
+    <!-- ===== STEP 2: Candidates ===== -->
+    <section class="panel" id="panel-candidates">
+      <div class="panel__head">
+        <h2>Candidate resumes</h2>
+        <p>Add up to 20 candidates. Upload several resume files at once, or paste text one by one. Names are optional — a candidate ID is enough, and evaluation only uses job-related content.</p>
+      </div>
+
+      <div class="upload-row">
+        <label class="btn btn--outline file-btn">
+          Bulk-upload resumes (.txt, .pdf, .docx)
+          <input type="file" id="bulkFiles" accept=".txt,.pdf,.docx" multiple hidden>
+        </label>
+        <span class="upload-row__hint" id="bulkFileStatus">Each file becomes one candidate card, titled by filename.</span>
+      </div>
+
+      <div class="candidate-list" id="candidateList"><!-- candidate cards injected here --></div>
+
+      <button class="btn btn--outline" id="addCandidate" type="button">+ Add a candidate manually</button>
+
+      <div class="panel__foot panel__foot--split">
+        <button class="btn btn--ghost" data-tab="jd" type="button">← Back</button>
+        <button class="btn btn--primary" id="toResults" type="button">Next: run evaluation →</button>
+      </div>
+    </section>
+
+    <!-- ===== STEP 3: Run + Results ===== -->
+    <section class="panel" id="panel-results">
+      <div class="panel__head">
+        <h2>Run &amp; results</h2>
+        <p>Review runs entirely in your browser and calls the Anthropic API directly with the key you provide in Settings.</p>
+      </div>
+
+      <div class="run-bar">
+        <button class="btn btn--primary btn--lg" id="runEval" type="button">Run evaluation</button>
+        <div class="run-bar__meta" id="runMeta">Add a JD and at least one candidate to begin.</div>
+      </div>
+
+      <div class="loading" id="loading" hidden>
+        <div class="loading__stamp">PROCESSING</div>
+        <p id="loadingMsg">Reading candidate files…</p>
+      </div>
+
+      <div class="error-box" id="errorBox" hidden></div>
+
+      <div class="results" id="results" hidden>
+
+        <div class="export-row">
+          <button class="btn btn--outline btn--sm" id="downloadJson" type="button">Download full results (.json)</button>
+          <button class="btn btn--outline btn--sm" id="downloadCsv" type="button">Download ranking (.csv)</button>
+        </div>
+
+        <article class="doc-block" id="block-matrix">
+          <h3>JD evaluation matrix</h3>
+          <div class="table-wrap"><table class="ledger" id="matrixTable"></table></div>
+          <div class="knockout-box" id="knockoutBox"></div>
+        </article>
+
+        <article class="doc-block" id="block-ranking">
+          <h3>Full ranking</h3>
+          <p class="doc-block__hint">Click a row to jump to that candidate's full scorecard.</p>
+          <div class="table-wrap"><table class="ledger ledger--clickable" id="rankingTable"></table></div>
+        </article>
+
+        <article class="doc-block" id="block-top5">
+          <h3>Top 5 priority candidates</h3>
+          <div class="top5-grid" id="top5Grid"></div>
+        </article>
+
+        <article class="doc-block" id="block-scorecards">
+          <h3>Candidate-by-candidate scorecards</h3>
+          <div class="scorecard-list" id="scorecardList"></div>
+        </article>
+
+        <article class="doc-block" id="block-recommendation">
+          <h3>Hiring recommendation</h3>
+          <div id="recommendationBlock"></div>
+        </article>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="deskfoot">
+    <p>Evaluations are generated by a language model from the text you provide. Treat scores as a decision aid — validate mandatory-criteria gaps and top-candidate claims before making hiring decisions.</p>
+  </footer>
+</div>
+
+<!-- ===== Settings drawer ===== -->
+<div class="drawer" id="settingsDrawer" hidden>
+  <div class="drawer__panel">
+    <div class="drawer__head">
+      <h2>Settings</h2>
+      <button class="btn btn--ghost btn--icon" id="closeSettings" type="button" aria-label="Close">✕</button>
+    </div>
+
+    <label class="field-label" for="apiKey">Anthropic API key</label>
+    <input type="password" id="apiKey" class="input" placeholder="sk-ant-...">
+    <p class="field-hint">Stored only in this browser tab unless you check "remember" below. Never committed to your repo — this tool calls the Anthropic API directly from your browser, so the key is visible in your own network requests. Don't deploy a page with a key already filled in; each user enters their own.</p>
+
+    <label class="checkbox">
+      <input type="checkbox" id="rememberKey">
+      Remember key on this device (localStorage)
+    </label>
+
+    <label class="field-label" for="modelSelect">Model</label>
+    <select id="modelSelect" class="input">
+      <option value="claude-sonnet-5" selected>Claude Sonnet 5 — balanced, recommended</option>
+      <option value="claude-opus-4-8">Claude Opus 4.8 — highest reasoning depth, slower/costlier</option>
+      <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest, best for quick passes</option>
+    </select>
+
+    <label class="field-label" for="maxTokens">Max output tokens</label>
+    <input type="number" id="maxTokens" class="input" value="16000" min="4000" max="32000" step="1000">
+    <p class="field-hint">Raise this if a run gets cut off with many candidates (each scorecard adds ~300–500 tokens).</p>
+
+    <div class="drawer__foot">
+      <button class="btn btn--primary" id="saveSettings" type="button">Save settings</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="js/parse.js"></script>
+<script src="js/api.js"></script>
+<script src="js/render.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
